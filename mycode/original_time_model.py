@@ -28,7 +28,7 @@ class AlexNetModel(nn.Module):
         # Adjusting the input size for the first fully connected layer after flattening
         self.fc1 = nn.Linear(9216, 4096)
         self.fc2 = nn.Linear(4096, 4096)
-        self.fc3 = nn.Linear(4096, 1000)  # Assuming the output classes are 1000 as in original AlexNet
+        self.fc3 = nn.Linear(4096, 1000)  # output classes are 1000 in original AlexNet
 
         # Adding optional Dropout and BatchNorm for better regularization
         self.dropout = nn.Dropout(0.5)
@@ -127,80 +127,82 @@ def get_transform():
     ])
 
 
-def extract_features_from_video(video_path, model, transform):
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        print("Error opening video file")
-        return None
+# def extract_features_from_video(video_path, model, transform):
+#     cap = cv2.VideoCapture(video_path)
+#     if not cap.isOpened():
+#         print("Error opening video file")
+#         return None
 
-    features_conv2_list = []
-    features_pool5_list = []
-    features_fc1_list = []
-    features_fc2_list = []
-    output_list = []
+#     features_conv2_list = []
+#     features_pool5_list = []
+#     features_fc1_list = []
+#     features_fc2_list = []
+#     output_list = []
 
-    model.eval()  # Set the model to evaluation mode
-    frame_rate = cap.get(cv2.CAP_PROP_FPS)
+#     model.eval()  # Set the model to evaluation mode
+#     frame_rate = cap.get(cv2.CAP_PROP_FPS)
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+#     while True:
+#         ret, frame = cap.read()
+#         if not ret:
+#             break
         
-        # Process the frame
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        frame = transform(frame)
-        # frame = transform(Image.fromarray(frame))
-        frame = frame.unsqueeze(0)  # Add batch dimension
+#         # Process the frame
+#         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#         frame = transform(frame)
+#         # frame = transform(Image.fromarray(frame))
+#         frame = frame.unsqueeze(0)  # Add batch dimension
 
-        # Extract features
-        with torch.no_grad():
-            features_conv2, features_pool5, features_fc1, features_fc2, output = model(frame)
+#         # Extract features
+#         with torch.no_grad():
+#             features_conv2, features_pool5, features_fc1, features_fc2, output = model(frame)
 
-        # Append features to lists
-        features_conv2_list.append(features_conv2.squeeze(0))
-        features_pool5_list.append(features_pool5.squeeze(0))
-        features_fc1_list.append(features_fc1.squeeze(0))
-        features_fc2_list.append(features_fc2.squeeze(0))
-        output_list.append(output.squeeze(0))
-    cap.release()
+#         # Append features to lists
+#         features_conv2_list.append(features_conv2.squeeze(0))
+#         features_pool5_list.append(features_pool5.squeeze(0))
+#         features_fc1_list.append(features_fc1.squeeze(0))
+#         features_fc2_list.append(features_fc2.squeeze(0))
+#         output_list.append(output.squeeze(0))
+#     cap.release()
 
-    # Stack all features into tensors
-    return {
-        'conv2': torch.stack(features_conv2_list),
-        'pool5': torch.stack(features_pool5_list),
-        'fc1': torch.stack(features_fc1_list),
-        'fc2': torch.stack(features_fc2_list),
-        'output': torch.stack(output_list),
-        'frame_rate': frame_rate
-    }
+#     # Stack all features into tensors
+#     return {
+#         'conv2': torch.stack(features_conv2_list),
+#         'pool5': torch.stack(features_pool5_list),
+#         'fc1': torch.stack(features_fc1_list),
+#         'fc2': torch.stack(features_fc2_list),
+#         'output': torch.stack(output_list),
+#         'frame_rate': frame_rate
+#     }
 
-def process_video_features(video_path, model, transform, accumulator):
-    features = extract_features_from_video(video_path, model, transform)
-    if features is None:
-        return None
+
+# def process_video_features(video_path, model, transform, accumulator):
+#     features = extract_features_from_video(video_path, model, transform)
+#     if features is None:
+#         return None
     
-    all_changes_detected = []
-    frame_rate = features['frame_rate']
+#     all_changes_detected = []
+#     frame_rate = features['frame_rate']
 
-    # Process each set of features
-    for i in range(features['fc1'].size(0)):
-        layer_features = [features['conv2'][i], features['pool5'][i], 
-                          features['fc1'][i], features['fc2'][i], 
-                          features['output'][i]]
-        changes_detected = accumulator.process_features(layer_features)
-        all_changes_detected.append(changes_detected)
+#     # Process each set of features
+#     for i in range(features['fc1'].size(0)):
+#         layer_features = [features['conv2'][i], features['pool5'][i], 
+#                           features['fc1'][i], features['fc2'][i], 
+#                           features['output'][i]]
+#         changes_detected = accumulator.process_features(layer_features)
+#         all_changes_detected.append(changes_detected)
     
-    # Estimate duration based on accumulated changes
-    num_frames = len(features['fc1'])
-    duration_seconds = num_frames / frame_rate
+#     # Estimate duration based on accumulated changes
+#     num_frames = len(features['fc1'])
+#     duration_seconds = num_frames / frame_rate
 
-    return {
-        'accumulated_changes': accumulator.accumulated_changes,
-        'changes_detected': all_changes_detected,
-        'duration_seconds': duration_seconds,
-        'frame_rate': frame_rate
-    }
+#     return {
+#         'accumulated_changes': accumulator.accumulated_changes,
+#         'changes_detected': all_changes_detected,
+#         'duration_seconds': duration_seconds,
+#         'frame_rate': frame_rate
+#     }
+
 
 def train_time_estimator(training_videos: list, model: AlexNetModel, 
                          transform, accumulator: FeatureAccumulator) -> TimeEstimator:
@@ -237,6 +239,7 @@ def train_time_estimator(training_videos: list, model: AlexNetModel,
     estimator.train(all_changes_detected, all_times)
     return estimator
 
+
 def predict_time_for_video(video_path: str, 
                            model: AlexNetModel, transform, 
                            accumulator: FeatureAccumulator, 
@@ -270,15 +273,10 @@ def predict_times_for_videos_in_dir(dir_path: str | list,
         print(f"Predicted times for {video}: {times}")
     return predicted_times_dict
 
-def plot_durations(video_names, actual_durations, predicted_durations):
-    """
-    Plot the actual vs. predicted durations of videos.
-    :param video_names: List of video file names.
-    :param actual_durations: List of actual video durations.
-    :param predicted_durations: List of predicted video durations.
-    """
 
-      # Check if the lengths of the lists are the same
+def plot_durations(video_names, actual_durations, predicted_durations):
+
+    # Check if the lengths of the lists are the same
     if len(video_names) != len(actual_durations) or len(video_names) != len(predicted_durations):
         raise ValueError("Mismatch in list lengths: video_names, actual_durations, and predicted_durations must have the same length.")
     
@@ -302,6 +300,148 @@ def plot_durations(video_names, actual_durations, predicted_durations):
     
     fig.tight_layout()
     plt.show()
+
+
+def process_video_features(video_path, model, transform, accumulator, gaze_data=None):
+    features = extract_features_from_video(video_path, model, transform, gaze_data)
+    if features is None:
+        return None
+    
+    all_changes_detected = []
+    frame_rate = features['frame_rate']
+
+    # Process each set of features
+    for i in range(features['fc1'].size(0)):
+        layer_features = [features['conv2'][i], features['pool5'][i], 
+                          features['fc1'][i], features['fc2'][i], 
+                          features['output'][i]]
+        changes_detected = accumulator.process_features(layer_features)
+        all_changes_detected.append(changes_detected)
+    
+    # Estimate duration based on accumulated changes
+    num_frames = len(features['fc1'])
+    duration_seconds = num_frames / frame_rate
+
+    return {
+        'accumulated_changes': accumulator.accumulated_changes,
+        'changes_detected': all_changes_detected,
+        'duration_seconds': duration_seconds,
+        'frame_rate': frame_rate
+    }
+
+
+def simulate_gaze_data(num_frames, frame_width, frame_height):
+    """Simulate gaze data centered around the middle of the frame."""
+    center_x = frame_width // 2
+    center_y = frame_height // 2
+    gaze_data = []
+
+    # Random movement around the center
+    max_shift = 50  # Max shift in pixels from the center
+
+    for _ in range(num_frames):
+        shift_x = np.random.randint(-max_shift, max_shift)
+        shift_y = np.random.randint(-max_shift, max_shift)
+        gaze_x = center_x + shift_x
+        gaze_y = center_y + shift_y
+        gaze_data.append((gaze_x, gaze_y))
+    
+    return gaze_data
+
+
+def apply_spotlight_filter(frame, gaze_point, spotlight_size=400):
+    """Apply a spotlight filter based on simulated gaze data."""
+    frame_height, frame_width = frame.shape[1], frame.shape[2]
+    half_size = spotlight_size // 2
+
+    # Clamp the gaze point to ensure it stays within the image boundaries
+    gaze_x = min(max(gaze_point[0], half_size), frame_width - half_size)
+    gaze_y = min(max(gaze_point[1], half_size), frame_height - half_size)
+
+    x_min = max(gaze_x - half_size, 0)
+    x_max = min(gaze_x + half_size, frame_width)
+    y_min = max(gaze_y - half_size, 0)
+    y_max = min(gaze_y + half_size, frame_height)
+
+    # Ensure the crop does not result in zero dimensions
+    if x_max - x_min == 0 or y_max - y_min == 0:
+        raise ValueError("Crop resulted in an invalid size: zero height or width.")
+
+    spotlight_frame = frame[:, y_min:y_max, x_min:x_max]
+
+    # Resize the cropped region back to the original frame size
+    if spotlight_frame.size(1) > 0 and spotlight_frame.size(2) > 0:
+        return F.interpolate(spotlight_frame.unsqueeze(0), size=(frame_height, frame_width), mode='bilinear').squeeze(0)
+    else:
+        raise ValueError("Spotlight frame has invalid dimensions after cropping.")
+
+
+def extract_features_from_video(video_path, model, transform, gaze_data=None):
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print("Error opening video file")
+        return None
+
+    features_conv2_list = []
+    features_pool5_list = []
+    features_fc1_list = []
+    features_fc2_list = []
+    output_list = []
+
+    model.eval()  # Set the model to evaluation mode
+    frame_rate = cap.get(cv2.CAP_PROP_FPS)
+
+    frame_index = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        # Process the frame
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame = transform(frame)
+
+        frame_index = 0
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        # Simulate gaze data
+        if gaze_data is None:
+            num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            gaze_data = simulate_gaze_data(num_frames, frame_width, frame_height)
+
+        # Apply the simulated gaze-based spotlight filter
+        if frame_index < len(gaze_data):
+            gaze_point = gaze_data[frame_index]
+            frame = apply_spotlight_filter(frame, gaze_point)
+
+        frame = frame.unsqueeze(0)  # Add batch dimension
+
+        # Extract features
+        with torch.no_grad():
+            features_conv2, features_pool5, features_fc1, features_fc2, output = model(frame)
+
+        # Append features to lists
+        features_conv2_list.append(features_conv2.squeeze(0))
+        features_pool5_list.append(features_pool5.squeeze(0))
+        features_fc1_list.append(features_fc1.squeeze(0))
+        features_fc2_list.append(features_fc2.squeeze(0))
+        output_list.append(output.squeeze(0))
+
+        frame_index += 1
+    
+    cap.release()
+
+    # Stack all features into tensors
+    return {
+        'conv2': torch.stack(features_conv2_list),
+        'pool5': torch.stack(features_pool5_list),
+        'fc1': torch.stack(features_fc1_list),
+        'fc2': torch.stack(features_fc2_list),
+        'output': torch.stack(output_list),
+        'frame_rate': frame_rate
+    }
 
 
 if __name__ == "__main__":
@@ -332,6 +472,3 @@ if __name__ == "__main__":
     # Plot results
     # time_estimator.plot_results(predicted_times, times)
     plot_durations(test_videos, actual_time_list, predicted_durations)
-    # print(len(test_videos))
-    # print(len(actual_time_list))
-    # print(len(predicted_duration))

@@ -1,5 +1,6 @@
 import cv2
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models, transforms
 import os 
@@ -7,6 +8,7 @@ from bayesian_surprise import SaliencyPredictor
 from original_time_model import AlexNetModel, FeatureAccumulator, get_transform, plot_durations, predict_time_for_video, train_time_estimator
 
 
+""" Integration of Bayesian Suprise into the original model """
 def apply_saliency_spotlight(frame, saliency_map, spotlight_size=400):
     frame_height, frame_width = frame.shape[1], frame.shape[2]
     half_size = spotlight_size // 2
@@ -116,7 +118,9 @@ if __name__ == "__main__":
 
     for video in test_videos:
         result = extract_features_with_saliency(video, model, saliency_model, transform, device)
+        # replace previous extract with current extract
         # process video
+
         predicted_duration, actual_duration = predict_time_for_video(video, model, transform, accumulator, regressor)
         actual_time_list.append(actual_duration)
         predicted_durations.append(predicted_duration)

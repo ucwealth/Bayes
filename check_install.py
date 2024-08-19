@@ -13,3 +13,11 @@ print("NumPy version:", np.__version__)
 # print("Matplotlib version:", plt.__version__)
 print("Scikit-Learn version:", sklearn.__version__)
 print("PIL version:", Image.__version__)
+
+# Metal
+if torch.backends.mps.is_available():
+    mps_device = torch.device("mps")
+    x = torch.ones(1, device=mps_device)
+    print (x)
+else:
+    print ("MPS device not found.")

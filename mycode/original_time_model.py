@@ -127,83 +127,6 @@ def get_transform():
     ])
 
 
-# def extract_features_from_video(video_path, model, transform):
-#     cap = cv2.VideoCapture(video_path)
-#     if not cap.isOpened():
-#         print("Error opening video file")
-#         return None
-
-#     features_conv2_list = []
-#     features_pool5_list = []
-#     features_fc1_list = []
-#     features_fc2_list = []
-#     output_list = []
-
-#     model.eval()  # Set the model to evaluation mode
-#     frame_rate = cap.get(cv2.CAP_PROP_FPS)
-
-#     while True:
-#         ret, frame = cap.read()
-#         if not ret:
-#             break
-        
-#         # Process the frame
-#         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#         frame = transform(frame)
-#         # frame = transform(Image.fromarray(frame))
-#         frame = frame.unsqueeze(0)  # Add batch dimension
-
-#         # Extract features
-#         with torch.no_grad():
-#             features_conv2, features_pool5, features_fc1, features_fc2, output = model(frame)
-
-#         # Append features to lists
-#         features_conv2_list.append(features_conv2.squeeze(0))
-#         features_pool5_list.append(features_pool5.squeeze(0))
-#         features_fc1_list.append(features_fc1.squeeze(0))
-#         features_fc2_list.append(features_fc2.squeeze(0))
-#         output_list.append(output.squeeze(0))
-#     cap.release()
-
-#     # Stack all features into tensors
-#     return {
-#         'conv2': torch.stack(features_conv2_list),
-#         'pool5': torch.stack(features_pool5_list),
-#         'fc1': torch.stack(features_fc1_list),
-#         'fc2': torch.stack(features_fc2_list),
-#         'output': torch.stack(output_list),
-#         'frame_rate': frame_rate
-#     }
-
-
-# def process_video_features(video_path, model, transform, accumulator):
-#     features = extract_features_from_video(video_path, model, transform)
-#     if features is None:
-#         return None
-    
-#     all_changes_detected = []
-#     frame_rate = features['frame_rate']
-
-#     # Process each set of features
-#     for i in range(features['fc1'].size(0)):
-#         layer_features = [features['conv2'][i], features['pool5'][i], 
-#                           features['fc1'][i], features['fc2'][i], 
-#                           features['output'][i]]
-#         changes_detected = accumulator.process_features(layer_features)
-#         all_changes_detected.append(changes_detected)
-    
-#     # Estimate duration based on accumulated changes
-#     num_frames = len(features['fc1'])
-#     duration_seconds = num_frames / frame_rate
-
-#     return {
-#         'accumulated_changes': accumulator.accumulated_changes,
-#         'changes_detected': all_changes_detected,
-#         'duration_seconds': duration_seconds,
-#         'frame_rate': frame_rate
-#     }
-
-
 def train_time_estimator(training_videos: list, model: AlexNetModel, 
                          transform, accumulator: FeatureAccumulator) -> TimeEstimator:
     """
@@ -302,8 +225,11 @@ def plot_durations(video_names, actual_durations, predicted_durations):
     plt.show()
 
 
-def process_video_features(video_path, model, transform, accumulator, gaze_data=None):
+def process_video_features(video_path, model, transform, accumulator, gaze_data=None, saliency=False):
+    if saliency:
+        result = extract_features_with_saliency(video, model, saliency_model, transform, device)
     features = extract_features_from_video(video_path, model, transform, gaze_data)
+
     if features is None:
         return None
     
@@ -349,7 +275,7 @@ def simulate_gaze_data(num_frames, frame_width, frame_height):
     return gaze_data
 
 
-def apply_spotlight_filter(frame, gaze_point, spotlight_size=400):
+def apply_spotlight_filter(frame, gaze_point, spotlight_size=400): # make this resusable
     """Apply a spotlight filter based on simulated gaze data."""
     frame_height, frame_width = frame.shape[1], frame.shape[2]
     half_size = spotlight_size // 2
@@ -376,7 +302,7 @@ def apply_spotlight_filter(frame, gaze_point, spotlight_size=400):
         raise ValueError("Spotlight frame has invalid dimensions after cropping.")
 
 
-def extract_features_from_video(video_path, model, transform, gaze_data=None):
+def extract_features_from_video(video_path, model, transform, gaze_data=None): # make this resusable
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file")

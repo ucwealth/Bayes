@@ -30,4 +30,4 @@ MANIFEST
 # Environments
 .venv
 venv/
-venv.bak/
+venv.bak/DeepGaze/

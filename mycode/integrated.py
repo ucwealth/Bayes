@@ -8,7 +8,7 @@ from bayesian_surprise import SaliencyPredictor
 from original_time_model import AlexNetModel, FeatureAccumulator, get_transform, plot_durations, predict_time_for_video, train_time_estimator
 
 
-""" Integration of Bayesian Suprise into the original model """
+""" Integration of Bayesian Suprise into the original time model """
 def apply_saliency_spotlight(frame, saliency_map, spotlight_size=400):
     frame_height, frame_width = frame.shape[1], frame.shape[2]
     half_size = spotlight_size // 2

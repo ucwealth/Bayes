@@ -14,6 +14,7 @@ import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
+
 class AlexNetModel(nn.Module):
     def __init__(self):
         super(AlexNetModel, self).__init__()
@@ -22,13 +23,8 @@ class AlexNetModel(nn.Module):
         # Extract specific layers from AlexNet
         self.conv2 = nn.Sequential(*list(self.alexnet.features.children())[:5])  # Up to and including conv2
         self.pool5 = nn.Sequential(*list(self.alexnet.features.children())[5:])  # From after conv2 to pool5
-        # self.fc7 = nn.Sequential(*list(self.alexnet.classifier.children())[:5])  # Up to and including fc7
-        # self.output = nn.Sequential(*list(self.alexnet.classifier.children())[5:])  # Output layer
-
-        # Adjusting the input size for the first fully connected layer after flattening
-        self.fc1 = nn.Linear(9216, 4096)
-        self.fc2 = nn.Linear(4096, 4096)
-        self.fc3 = nn.Linear(4096, 1000)  # output classes are 1000 in original AlexNet
+        self.fc7 = nn.Sequential(*list(self.alexnet.classifier.children())[:5])  # Up to and including fc7
+        self.output = nn.Sequential(*list(self.alexnet.classifier.children())[5:])  # Output layer
 
         # Adding optional Dropout and BatchNorm for better regularization
         self.dropout = nn.Dropout(0.5)
@@ -49,23 +45,20 @@ class AlexNetModel(nn.Module):
         # Flatten before passing through fully connected layers
         flattened = torch.flatten(features_pool5, 1)
 
-        features_fc1 = self.relu(self.fc1(flattened))
-        features_fc1 = self.batchnorm1(features_fc1)
-        features_fc1 = self.dropout(features_fc1)
+        classifier_fc7 = self.relu(self.fc7(flattened))
+        classifier_fc7 = self.batchnorm1(classifier_fc7)
+        classifier_fc7 = self.dropout(classifier_fc7)
+
+        output = self.output(classifier_fc7)
+        output = F.softmax(output, dim=1)
         
-        features_fc2 = self.relu(self.fc2(features_fc1))
-        features_fc2 = self.batchnorm2(features_fc2)
-        features_fc2 = self.dropout(features_fc2)
-        
-        output = self.fc3(features_fc2)
-        
-        return features_conv2, features_pool5, features_fc1, features_fc2, output
+        return features_conv2, features_pool5, classifier_fc7, output
 
 
 class FeatureAccumulator:
     def __init__(self, thresholds=None, decay_rate=100.0, random_seed=None):
         if thresholds is None:
-            thresholds = [1.0, 1.5, 2.0, 2.5, 3.0]
+            thresholds = [1.0, 1.5, 2.0, 2.5]
 
         self.thresholds = torch.tensor(thresholds, dtype=torch.float32)
         self.decay_rate = torch.tensor(decay_rate, dtype=torch.float32)
@@ -94,8 +87,7 @@ class FeatureAccumulator:
 class TimeEstimator:
     def __init__(self):
         # Initialize SVR with a radial basis function kernel
-        self.regressor = make_pipeline(StandardScaler(), SVR(kernel='rbf', C=100, gamma=0.1, epsilon=0.1))
-        # self.regressor = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=0.1)
+        self.regressor = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=0.1)
 
     def train(self, features, times):
         self.regressor.fit(features, times)
@@ -103,7 +95,8 @@ class TimeEstimator:
     def predict(self, features):
         return self.regressor.predict(features)
     
-    def plot_results(self, predicted_times: np.ndarray, actual: np.ndarray):
+    
+def plot_results(predicted_times: np.ndarray, actual: np.ndarray):
         try:
             plt.plot(actual, predicted_times, 'ro', label='Predicted vs Actual')
             plt.plot([actual.min(), actual.max()], [actual.min(), actual.max()], 'k--', lw=2)
@@ -226,8 +219,6 @@ def plot_durations(video_names, actual_durations, predicted_durations):
 
 
 def process_video_features(video_path, model, transform, accumulator, gaze_data=None, saliency=False):
-    if saliency:
-        result = extract_features_with_saliency(video, model, saliency_model, transform, device)
     features = extract_features_from_video(video_path, model, transform, gaze_data)
 
     if features is None:
@@ -237,15 +228,15 @@ def process_video_features(video_path, model, transform, accumulator, gaze_data=
     frame_rate = features['frame_rate']
 
     # Process each set of features
-    for i in range(features['fc1'].size(0)):
+    for i in range(features['fc7'].size(0)):
         layer_features = [features['conv2'][i], features['pool5'][i], 
-                          features['fc1'][i], features['fc2'][i], 
+                          features['fc7'][i],
                           features['output'][i]]
         changes_detected = accumulator.process_features(layer_features)
         all_changes_detected.append(changes_detected)
     
     # Estimate duration based on accumulated changes
-    num_frames = len(features['fc1'])
+    num_frames = len(features['fc7'])
     duration_seconds = num_frames / frame_rate
 
     return {
@@ -302,7 +293,7 @@ def apply_spotlight_filter(frame, gaze_point, spotlight_size=400): # make this r
         raise ValueError("Spotlight frame has invalid dimensions after cropping.")
 
 
-def extract_features_from_video(video_path, model, transform, gaze_data=None): # make this resusable
+def extract_features_from_video(video_path, model, transform, gaze_data=None): 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print("Error opening video file")
@@ -310,8 +301,7 @@ def extract_features_from_video(video_path, model, transform, gaze_data=None): #
 
     features_conv2_list = []
     features_pool5_list = []
-    features_fc1_list = []
-    features_fc2_list = []
+    classifier_fc7_list = []
     output_list = []
 
     model.eval()  # Set the model to evaluation mode
@@ -346,13 +336,13 @@ def extract_features_from_video(video_path, model, transform, gaze_data=None): #
 
         # Extract features
         with torch.no_grad():
-            features_conv2, features_pool5, features_fc1, features_fc2, output = model(frame)
+            features_conv2, features_pool5, classifier_fc7, output = model(frame)
 
         # Append features to lists
         features_conv2_list.append(features_conv2.squeeze(0))
-        features_pool5_list.append(features_pool5.squeeze(0))
-        features_fc1_list.append(features_fc1.squeeze(0))
-        features_fc2_list.append(features_fc2.squeeze(0))
+        features_pool5_list.append(features_pool5.squeeze(0)) 
+        classifier_fc7_list.append(classifier_fc7.squeeze(0))
+        # features_fc2_list.append(features_fc2.squeeze(0))
         output_list.append(output.squeeze(0))
 
         frame_index += 1
@@ -363,8 +353,7 @@ def extract_features_from_video(video_path, model, transform, gaze_data=None): #
     return {
         'conv2': torch.stack(features_conv2_list),
         'pool5': torch.stack(features_pool5_list),
-        'fc1': torch.stack(features_fc1_list),
-        'fc2': torch.stack(features_fc2_list),
+        'fc7': torch.stack(classifier_fc7_list),
         'output': torch.stack(output_list),
         'frame_rate': frame_rate
     }
@@ -383,8 +372,8 @@ if __name__ == "__main__":
                   for f in os.listdir(video_dir) 
                   if f.endswith(('.mp4', '.avi', '.mkv'))]
     # Split into training and testing sets
-    train_videos = all_videos[int(0.6 * len(all_videos)):]  # 70% for training
-    test_videos = all_videos[:int(0.4 * len(all_videos))]   # 30% for testing
+    train_videos = all_videos[int(0.7 * len(all_videos)):]  # 70% for training
+    test_videos = all_videos[:int(0.3 * len(all_videos))]   # 30% for testing
     # train 
     regressor = train_time_estimator(train_videos, model, transform, accumulator)
     # test/predict
@@ -393,8 +382,7 @@ if __name__ == "__main__":
         actual_time_list.append(actual_duration)
         predicted_durations.append(predicted_duration)
         print(f"Predicted times for {video}: {predicted_duration}")
-    # predicted_times_dict = predict_times_for_videos_in_dir(dir, model, transform, accumulator, regressor)
     
     # Plot results
-    # time_estimator.plot_results(predicted_times, times)
     plot_durations(test_videos, actual_time_list, predicted_durations)
+

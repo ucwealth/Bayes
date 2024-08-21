@@ -6,9 +6,13 @@ import os
 from original_time_model import AlexNetModel, FeatureAccumulator, get_transform, plot_durations, predict_time_for_video, train_time_estimator
 import numpy as np
 from DeepGaze import deepgaze_pytorch
-from DeepGaze.deepgaze_pytorch import DeepGazeIIE
 
+"""
 
+- THIS MODEL USES A PRETRAINED SALIENCY MODEL(DEEPGAZE) INSTEAD OF THE BAYESIAN SUPRISE MODEL 
+- THE GOAL IS TO COMPARE THE RESULTS WITH THAT OF THE BAYESIAN SUPRISE MODEL AND SEE WHICH PERFORMS BETTER
+
+"""
 class SaliencyModel:
     def __init__(self):
         DEVICE = 'cuda'
@@ -22,7 +26,7 @@ class SaliencyModel:
             saliency_map = self.model(frame.unsqueeze(0))['out'].squeeze(0)
         
         # Post-process the saliency map to get the attention points
-        saliency_map = torch.sigmoid(saliency_map)  # Apply a sigmoid to get values between 0 and 1
+        saliency_map = torch.sigmoid(saliency_map)  # Sigmoid to get values between 0 and 1
         return saliency_map
 
 
@@ -118,13 +122,13 @@ def extract_features_from_video(video_path, model, transform):
         'frame_rate': frame_rate
     }
 
+
 if __name__ == "__main__":
     model = AlexNetModel()
     transform = get_transform()
     accumulator = FeatureAccumulator()
     actual_time_list = []
     predicted_durations = []
-    # video_path = '../videos/vid0.mp4'
     video_dir = '../videos' 
     # List all video files in the directory
     all_videos = [os.path.join(video_dir, f) 

@@ -14,7 +14,13 @@ import torch.nn.functional as F
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
+"""
 
+    Code Implementation of the perceptual time model outlined in the paper titled:
+    "Activity in perceptual classification networks as a basis for human subjective time perception" 
+    By Roseboom et al., 2019
+
+"""
 class AlexNetModel(nn.Module):
     def __init__(self):
         super(AlexNetModel, self).__init__()

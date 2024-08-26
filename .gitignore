@@ -31,3 +31,8 @@ MANIFEST
 .venv
 venv/
 venv.bak/DeepGaze/
+
+SALICON
+SALICON/
+SALICON_npy
+SALICON_npy/

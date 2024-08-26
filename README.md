@@ -2,8 +2,6 @@
 
 This project integrates a Bayesian surprise model into the original time without clocks model. Link to original model [here](https://www.nature.com/articles/s41467-018-08194-7#Abs1). The goal is to enhance the model's ability to simulate human predictions of video duration by focusing on the most salient regions of each video frame.
 
-Here is a comprehensive README for your code that covers all the key aspects a user would need to understand and run your model effectively:
-
 ---
 
 # Bayesian Surprise Model for Gaze Prediction

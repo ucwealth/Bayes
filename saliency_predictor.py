@@ -6,7 +6,9 @@ from torch.utils.data import DataLoader, Dataset
 from sklearn.metrics import roc_auc_score
 from torchvision import transforms
 import cv2
-import sys, os 
+from PIL import Image
+import sys, os, glob 
+import torch.nn.functional as F
 
 
 class GazeDataset(Dataset):
@@ -28,9 +30,21 @@ class GazeDataset(Dataset):
 
     def __getitem__(self, idx):
         
-        frame = np.load(self.frames[idx])
-        gaze_map = np.load(self.gaze_maps[idx])
+        # Print the current file paths for debugging
+        print(f"Loading frame from: {self.frames[idx]}")
+        print(f"Loading gaze map from: {self.gaze_maps[idx]}")
         
+        try:
+            frame = np.load(self.frames[idx])
+            gaze_map = np.load(self.gaze_maps[idx])
+        except FileNotFoundError as e:
+            print(f"File not found: {e}")
+            raise
+        
+        # Convert frame from NumPy array to PIL Image
+        frame = Image.fromarray(frame.astype('uint8'), 'RGB')
+
+
         # Apply transform if available
         if self.transform:
             frame = self.transform(frame)
@@ -61,11 +75,11 @@ class FeatureDetectionFrontEnd(nn.Module):
         self.conv3 = nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, stride=1, padding=1)
 
     def forward(self, x):
-        x = self.pool(torch.relu(self.conv1(x)))
-        x = self.pool(torch.relu(self.conv2(x)))
-        x = torch.relu(self.conv3(x))
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = F.relu(self.conv3(x))
         return x
-
+    
 
 class SurpriseComputationBackEnd(nn.Module):
     """
@@ -73,15 +87,13 @@ class SurpriseComputationBackEnd(nn.Module):
     """
     def __init__(self):
         super(SurpriseComputationBackEnd, self).__init__()
-        self.fc1 = nn.Linear(128 * 32 * 32, 256)  # Adjust dimensions based on input size
-        self.fc2 = nn.Linear(256, 1)  # Output a single surprise score
+        self.conv1 = nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(in_channels=64, out_channels=1, kernel_size=3, padding=1)
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)  # Flatten the tensor
-        x = torch.relu(self.fc1(x))
-        x = torch.sigmoid(self.fc2(x))  # Sigmoid for output in range [0, 1]
+        x = F.relu(self.conv1(x)) 
+        x = torch.sigmoid(self.conv2(x)) 
         return x
-
 
 class BayesianSurpriseModel(nn.Module):
     """
@@ -119,6 +131,7 @@ def train_model(model, dataloader, criterion, optimizer, scheduler=None, num_epo
 
             # Forward pass
             outputs = model(inputs)
+            outputs = F.interpolate(outputs, size=(480, 640), mode='bilinear', align_corners=False)
             loss = criterion(outputs, targets)
 
             # Backward pass and optimization
@@ -239,11 +252,26 @@ if __name__ == "__main__":
     # Initialize dataset with transform
     frames_dir = 'SALICON/images/train'
     map_folder = 'SALICON/maps/train'
+
+    # Define the output folders for the .npy files
     output_image_folder = './SALICON_npy/train/images_npy'
     output_map_folder = './SALICON_npy/train/maps_npy'
     convert_images_and_maps_to_npy(frames_dir, map_folder, output_image_folder, output_map_folder)
 
-    dataset = GazeDataset(output_image_folder, output_map_folder, transform=transform)
+    # Use glob to find all .npy files in the directories
+    frame_files = sorted(glob.glob(os.path.join(output_image_folder, '*.npy')))
+    gaze_map_files = sorted(glob.glob(os.path.join(output_map_folder, '*.npy')))
+
+    # Debug: Print out the files found to ensure they are correct
+    # print(f"Frame files: {frame_files}")
+    # print(f"Gaze map files: {gaze_map_files}")
+
+    # Ensure that the lists are not empty and contain actual file paths
+    if not frame_files or not gaze_map_files:
+        raise ValueError("No .npy files found. Please check the dataset paths and ensure .npy files are present.")
+    
+    # Initialize the dataset with the correct file paths
+    dataset = GazeDataset(frames=frame_files, gaze_maps=gaze_map_files, transform=transform)
     dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
 
     # Initialize model, loss function, optimizer, and scheduler
